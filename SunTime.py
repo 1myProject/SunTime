@@ -1,9 +1,7 @@
-import os
 from math import sin, cos, tan, asin, acos, atan, pi, floor
 from datetime import date as dt
 from datetime import datetime, timedelta
 import time
-
 import requests
 
 headers = {
@@ -23,47 +21,41 @@ headers = {
 
 geo = requests.get('https://demo.ip-api.com/json/', headers=headers).json()
 latitude, longitude = geo['lat'], geo['lon']
+# latitude, longitude = -1.0842112,135.2012817 # о. Биак / Biak island
 
 localOffset = -time.timezone / 3600
+# localOffset = 9
 pii = pi / 180
 zenith = cos((90 + 5 / 6) * pii)
 
 
-def t_s(tt):
-    tt = str(tt)
-    r = int(tt[:2]) * 60 * 60
-    r += int(tt[3:5]) * 60
-    r += float(tt[6:])
+def t_now():  # сколько сейчас времени в секундах / how many time in seconds
+    tt = datetime.now().time()
+    r = tt.hour * 60 * 60
+    r += tt.minute * 60
+    r += tt.second
+    r += tt.microsecond / 10e5
     return r
 
 
-def clr():
-    os.system('cls' if 'nt' == os.name else 'clear')
-
-
 def linker():
-    t1 = time_of_rise_set(False)
-    t3 = time_of_rise_set(True)
-    t = time_of_rise_set(False, True)
-    t2 = (t3 - t1) / 2 + t1
-    t4 = ((t - t3) / 2 + t3 + 12 * 3600)
-    if t4 > 24 * 3600:
-        sp = [t4 - 24 * 3600,  # 0
-              t1,  # 6
-              t2,  # 12
-              t3,  # 18
-              t4]  # 24
-    else:  # для городов по типу Биак
-        sp = [t4,  # 0
-              t1,  # 6
-              t2,  # 12
-              t3,  # 18
-              t4 + 24 * 3600]  # 24
+    tr = time_of_rise_set(False)
+    ts = time_of_rise_set(True)
+    tr_t = time_of_rise_set(False, tomorrow=True)
+    ts_y = time_of_rise_set(True, yesterday=True)
+    tz = (ts - tr) / 2 + tr
+    tn = ((tr_t - ts) / 2 + ts + 12 * 3600)
+    tn_y = ((tr - ts_y) / 2 + ts_y + 12 * 3600)
 
-    return sp
+    return [tn_y - 24 * 3600,  # 0
+            tr,  # 6
+            tz,  # 12
+            ts,  # 18
+            tn  # 24
+            ]
 
 
-def How_Many_t(t):
+def How_Many_t(t: int):
     sp = linker()
 
     if sp[0] < t < sp[1]:  # 0-6
@@ -78,16 +70,19 @@ def How_Many_t(t):
     elif sp[3] < t < sp[4]:  # 18-24
         return (sp[4] - sp[3]) / (6 * 3600), 4, sp
 
-    elif sp[3] < t + 24 * 3600 < sp[4]:  # если не дошел до надира
+    elif sp[3] < t + 24 * 3600 < sp[4]:  # если t между надиром 12ч ночи/ if "t" between nadir ahd 12 midnight
         return (sp[4] - sp[3]) / (6 * 3600), 4, sp
 
 
-def time_of_rise_set(night: bool = 0, tomorrow: bool = 0):
-    if not tomorrow:
-        date = datetime.now()
-    else:
+def time_of_rise_set(night: bool = 0, tomorrow: bool = 0, yesterday: bool = 0):
+    if tomorrow:
         today = dt.today()
         date = today + timedelta(days=1)
+    elif yesterday:
+        today = dt.today()
+        date = today + timedelta(days=-1)
+    else:
+        date = datetime.now()
 
     day, month, year = date.day, date.month, date.year
 
@@ -135,7 +130,7 @@ def time_of_rise_set(night: bool = 0, tomorrow: bool = 0):
     # 7a
     cosH = (zenith - (sinDec * sin(latitude * pii))) / (cosDec * cos(latitude * pii))
 
-    if cosH < -1:
+    if cosH < -1: # TODO: реализовать полярный день и ночь
         print('сегодня полярный день')
         exit()
     elif cosH > 1:
@@ -163,23 +158,23 @@ def time_of_rise_set(night: bool = 0, tomorrow: bool = 0):
 
 
 raz = 1
-real_t = t_s(datetime.now().time())
+real_t = t_now()
 speed, place, sp_t = How_Many_t(real_t)
 
 last = 1
 while 1:
 
-    sun_t = (t_s(datetime.now().time()) - sp_t[place - 1]) / speed + 21600 * (place - 1)
+    sun_t = (t_now() - sp_t[place - 1]) / speed + 21600 * (place - 1)
     if int(sun_t) != last:
-        clr()
-        print('\r'+ datetime.utcfromtimestamp(sun_t).strftime('%H:%M:%S'), end='')
+        print('\r' + datetime.utcfromtimestamp(sun_t).strftime('%H:%M:%S'), end='')
         last = int(sun_t)
 
-    now = t_s(datetime.now().time())
-    if now + 24 * 60 * 60 >= sp_t[4] and place == 4:
-        print(1, end=' ')
-        speed, place, sp_t = How_Many_t(t_s(datetime.now().time()))
+    now = t_now()
+    if now < 6 * 3600:
+        now += 24 * 3600
+
+    if now >= sp_t[4] and place == 4:
+        speed, place, sp_t = How_Many_t(t_now())
     elif now >= sp_t[place]:
-        print(2, end=' ')
-        speed = (sp_t[place + 1] - sp_t[place]) / 21600
+        speed = (sp_t[place + 1] - sp_t[place]) / (6 * 3600)
         place += 1
