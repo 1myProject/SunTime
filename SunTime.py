@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 import time
 import requests
 
+DEBUG = True
+
 headers = {
     'Accept': '*/*',
     'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7,be;q=0.6',
@@ -21,38 +23,60 @@ headers = {
 
 geo = requests.get('https://demo.ip-api.com/json/', headers=headers).json()
 latitude, longitude = geo['lat'], geo['lon']
-# latitude, longitude = -1.0842112,135.2012817 # о. Биак / Biak island
+#latitude, longitude = -1.0842112,135.2012817 # о. Биак / Biak island
+#latitude, longitude = 67, 55
 
 localOffset = -time.timezone / 3600
 # localOffset = 9
+
 pii = pi / 180
 zenith = cos((90 + 5 / 6) * pii)
 
+if DEBUG:
+    print("lat:", latitude)
+    print("lon:", longitude)
+    print("lcOff:", localOffset, "/zn:", time.timezone)
+    print()
+
 
 def t_now():  # сколько сейчас времени в секундах / how many time in seconds
-    tt = datetime.now().time()
-    r = tt.hour * 60 * 60
-    r += tt.minute * 60
-    r += tt.second
-    r += tt.microsecond / 10e5
-    return r
+    t=time.time()%86400
+    return t -time.timezone
 
+to_str = lambda x: datetime.utcfromtimestamp(x).strftime('%d, %H:%M:%S')
 
 def linker():
     tr = time_of_rise_set(False)
     ts = time_of_rise_set(True)
     tr_t = time_of_rise_set(False, tomorrow=True)
     ts_y = time_of_rise_set(True, yesterday=True)
-    tz = (ts - tr) / 2 + tr
-    tn = ((tr_t - ts) / 2 + ts + 12 * 3600)
-    tn_y = ((tr - ts_y) / 2 + ts_y + 12 * 3600)
-
-    return [tn_y - 24 * 3600,  # 0
+    
+    tz = (ts + tr) / 2
+    tn = (tr_t + ts) / 2
+    tn_y = (tr + ts_y) / 2
+    
+    if DEBUG:
+        print("setting yest:\t", to_str(ts_y), ts_y)
+        print("nadir last:\t", to_str(tn_y), tn_y)
+        print("rise:\t\t", to_str(tr), tr)
+        print("zenith:\t\t", to_str(tz), tz)
+        print("setting:\t", to_str(ts), ts)
+        print("nadir next:\t", to_str(tn), tn)
+        print("rise tomm:\t", to_str(tr_t), tr_t)
+    
+    sp= [tn_y,  # 0
             tr,  # 6
             tz,  # 12
             ts,  # 18
             tn  # 24
             ]
+    
+    if DEBUG:
+        print("\nparts:")
+        for i in sp:
+            print(to_str(i), i)
+        print()
+    return sp
 
 
 def How_Many_t(t: int):
@@ -114,6 +138,10 @@ def time_of_rise_set(night: bool = 0, tomorrow: bool = 0, yesterday: bool = 0):
 
     # 5a
     RA = atan(0.91764 * tan(L * pii)) / pii
+#    if RA >=360:
+#        RA-= 360
+#    elif RA < 0:
+#        RA +=360
 
     # 5b
     Lquadrant = (floor(L / 90)) * 90
@@ -151,8 +179,11 @@ def time_of_rise_set(night: bool = 0, tomorrow: bool = 0, yesterday: bool = 0):
     # 9
     UT = T - lngHour
 
+    if tomorrow: offest = 24 
+    elif yesterday: offest = -24
+    else: offest = 0
     # 10
-    localT = UT + localOffset
+    localT = (UT + localOffset)%24 + offest
 
     return localT * 3600
 
@@ -166,7 +197,7 @@ while 1:
 
     sun_t = (t_now() - sp_t[place - 1]) / speed + 21600 * (place - 1)
     if int(sun_t) != last:
-        print('\r' + datetime.utcfromtimestamp(sun_t).strftime('%H:%M:%S'), end='')
+        print(datetime.utcfromtimestamp(sun_t).strftime('%H:%M:%S'), end='\r')
         last = int(sun_t)
 
     now = t_now()
@@ -178,3 +209,4 @@ while 1:
     elif now >= sp_t[place]:
         speed = (sp_t[place + 1] - sp_t[place]) / (6 * 3600)
         place += 1
+    #break
